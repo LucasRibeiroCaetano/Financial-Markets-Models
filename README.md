@@ -15,7 +15,10 @@ Each model combines multiple data sources (yields, volatility, central bank data
 
 ## License
 
-MIT License — free to use, modify, and reference with attribution.
+This project is licensed under the **Creative Commons Attribution–NonCommercial 4.0 International (CC BY-NC 4.0)** license.  
+You are free to use and modify these scripts for **personal and educational purposes**, but **commercial use is not permitted**.
+
+[Read the full license →](https://creativecommons.org/licenses/by-nc/4.0/)
 
 ## Author
 
