@@ -1,0 +1,187 @@
+//@version=6
+indicator(title = 'Macro Market Cycle Model', shorttitle = 'Macro Cycle', overlay = false)
+
+// Inputs
+real_r_star_us = input.float(0.5, title = 'Estimated Real r* US (%)', minval = 0.0, maxval = 2.0, step = 0.1)
+real_r_star_eu = input.float(0.5, title = 'Estimated Real r* EU (%)', minval = 0.0, maxval = 2.0, step = 0.1)
+
+// Fetch macro data US
+infl_yoy_us = request.security('ECONOMICS:USIRYY', '1M', close, ignore_invalid_symbol = true)
+fed_rate_us = request.security('ECONOMICS:USINTR', '1M', close, ignore_invalid_symbol = true)
+infl_exp = request.security('FRED:T10YIE', 'D', close, ignore_invalid_symbol = true)
+yield_spread_us = request.security('FRED:T10Y2Y', 'D', close, ignore_invalid_symbol = true)
+credit_spread_us = request.security('FRED:BAMLH0A0HYM2', 'D', close, ignore_invalid_symbol = true)
+unrate_us = request.security('FRED:UNRATE', '1M', close, ignore_invalid_symbol = true)
+
+// Fetch macro data EU
+infl_yoy_eu = request.security('ECONOMICS:EUIRYY', '1M', close, ignore_invalid_symbol = true)
+fed_rate_eu = request.security('ECONOMICS:EUINTR', '1M', close, ignore_invalid_symbol = true)
+eu10y = request.security('TVC:EU10Y', 'D', close, ignore_invalid_symbol = true)
+eu02y = request.security('TVC:EU02Y', 'D', close, ignore_invalid_symbol = true)
+yield_spread_eu = eu10y - eu02y
+credit_spread_eu = request.security('FRED:BAMLHE00EHYIOAS', 'D', close, ignore_invalid_symbol = true)
+unrate_eu = request.security('ECONOMICS:EUUR', '1M', close, ignore_invalid_symbol = true)
+
+// Neutral rate
+neutral_rate_us = real_r_star_us + infl_exp
+policy_stance_us = fed_rate_us - neutral_rate_us
+
+neutral_rate_eu = real_r_star_eu + infl_exp
+policy_stance_eu = fed_rate_eu - neutral_rate_eu
+
+// Logistic model
+float beta0 = -1.5
+float beta1 = -0.5
+float beta2 = 0.3
+float beta3 = 0.1
+float beta4 = -0.1
+float beta5 = 0.1
+
+float X_us = beta0 + beta1 * yield_spread_us + beta2 * policy_stance_us + beta3 * credit_spread_us + beta4 * unrate_us + beta5 * infl_yoy_us
+float prob_recession_us = na(X_us) ? na : 1.0 / (1.0 + math.exp(-X_us))
+float macro_score_us = na(prob_recession_us) ? na : 100.0 * (1.0 - prob_recession_us)
+
+float X_eu = beta0 + beta1 * yield_spread_eu + beta2 * policy_stance_eu + beta3 * credit_spread_eu + beta4 * unrate_eu + beta5 * infl_yoy_eu
+float prob_recession_eu = na(X_eu) ? na : 1.0 / (1.0 + math.exp(-X_eu))
+float macro_score_eu = na(prob_recession_eu) ? na : 100.0 * (1.0 - prob_recession_eu)
+
+// Cycle state US
+var int cycle_state_us = 0
+if macro_score_us > 75
+    cycle_state_us := 2
+    cycle_state_us
+else if macro_score_us > 50
+    cycle_state_us := 1
+    cycle_state_us
+else if macro_score_us > 25
+    cycle_state_us := 3
+    cycle_state_us
+else
+    cycle_state_us := 4
+    cycle_state_us
+
+string state_text_us = cycle_state_us == 2 ? 'Expansion' : cycle_state_us == 1 ? 'Recovery' : cycle_state_us == 3 ? 'Slowdown' : 'Recession'
+state_color_us = cycle_state_us == 2 ? color.green : cycle_state_us == 1 ? color.lime : cycle_state_us == 3 ? color.orange : color.red
+
+// Cycle state EU
+var int cycle_state_eu = 0
+if macro_score_eu > 75
+    cycle_state_eu := 2
+    cycle_state_eu
+else if macro_score_eu > 50
+    cycle_state_eu := 1
+    cycle_state_eu
+else if macro_score_eu > 25
+    cycle_state_eu := 3
+    cycle_state_eu
+else
+    cycle_state_eu := 4
+    cycle_state_eu
+
+string state_text_eu = cycle_state_eu == 2 ? 'Expansion' : cycle_state_eu == 1 ? 'Recovery' : cycle_state_eu == 3 ? 'Slowdown' : 'Recession'
+state_color_eu = cycle_state_eu == 2 ? color.green : cycle_state_eu == 1 ? color.lime : cycle_state_eu == 3 ? color.orange : color.red
+
+// Colors for indicators US
+color color_infl_us = infl_yoy_us < 0 ? color.red : infl_yoy_us <= 1 ? color.orange : infl_yoy_us <= 3 ? color.green : infl_yoy_us <= 4 ? color.orange : color.red
+color color_policy_us = policy_stance_us > 0.5 ? color.red : policy_stance_us > -0.5 ? color.orange : color.green
+color color_ys_us = yield_spread_us < 0 ? color.red : yield_spread_us <= 0.5 ? color.orange : color.green
+color color_cs_us = credit_spread_us < 4.0 ? color.green : credit_spread_us <= 5.0 ? color.new(color.green, 50) : credit_spread_us <= 6.5 ? color.orange : color.red
+color color_unrate_us = unrate_us < 4 ? color.green : unrate_us <= 5 ? color.orange : color.red
+
+// Colors for indicators EU
+color color_infl_eu = infl_yoy_eu < 0 ? color.red : infl_yoy_eu <= 1 ? color.orange : infl_yoy_eu <= 3 ? color.green : infl_yoy_eu <= 4 ? color.orange : color.red
+color color_policy_eu = policy_stance_eu > 0.5 ? color.red : policy_stance_eu > -0.5 ? color.orange : color.green
+color color_ys_eu = yield_spread_eu < 0 ? color.red : yield_spread_eu <= 0.5 ? color.orange : color.green
+color color_cs_eu = credit_spread_eu < 4.0 ? color.green : credit_spread_eu <= 5.0 ? color.new(color.green, 50) : credit_spread_eu <= 6.5 ? color.orange : color.red
+color color_unrate_eu = unrate_eu < 4 ? color.green : unrate_eu <= 5 ? color.orange : color.red
+
+// === Market Data (YTD returns, dominance, VIX) ===
+f_ytd(sym) =>
+    request.security(sym, 'D', (close / ta.valuewhen(ta.change(year) != 0, close[1], 0) - 1) * 100)
+
+spx_ytd = f_ytd('SPX')
+ndx_ytd = f_ytd('NDX')
+russell_ytd = f_ytd('RUT')
+btc_ytd = f_ytd('CRYPTOCAP:BTC')
+gold_ytd = f_ytd('XAUUSD')
+tlt_ytd = f_ytd('TLT')
+btc_dom = request.security('CRYPTOCAP:BTC.D', 'D', close)
+vix_current = request.security('VIX', 'D', close)
+
+// === VIX thresholds ===
+vix_color = vix_current < 15 ? color.green : vix_current < 25 ? color.orange : color.red
+
+// === Table ===
+var table summary = table.new(position.top_right, 5, 9, border_width = 1)
+
+if barstate.islast
+    // Headers
+    table.cell(summary, 0, 0, 'Indicator', width = 40, bgcolor = color.blue, text_color = color.white)
+    table.cell(summary, 1, 0, 'US', width = 15, bgcolor = color.blue, text_color = color.white)
+    table.cell(summary, 2, 0, 'EU', width = 15, bgcolor = color.blue, text_color = color.white)
+    table.cell(summary, 3, 0, 'Market Data', width = 15, bgcolor = color.blue, text_color = color.white)
+    table.cell(summary, 4, 0, 'Value', width = 15, bgcolor = color.blue, text_color = color.white)
+
+    // Indicators + Values
+    table.cell(summary, 0, 1, 'Inflation YoY', width = 25, bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 1, 1, str.tostring(infl_yoy_us, '#.##') + '%', width = 15, bgcolor = color.white, text_color = color_infl_us)
+    table.cell(summary, 2, 1, str.tostring(infl_yoy_eu, '#.##') + '%', width = 15, bgcolor = color.white, text_color = color_infl_eu)
+
+    table.cell(summary, 0, 2, 'Policy Rate', width = 25, bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 1, 2, str.tostring(fed_rate_us, '#.##') + '%', width = 15, bgcolor = color.white, text_color = color_policy_us)
+    table.cell(summary, 2, 2, str.tostring(fed_rate_eu, '#.##') + '%', width = 15, bgcolor = color.white, text_color = color_policy_eu)
+
+    table.cell(summary, 0, 3, 'Est. Neutral Rate', width = 25, bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 1, 3, str.tostring(neutral_rate_us, '#.##') + '%', width = 15, bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 2, 3, str.tostring(neutral_rate_eu, '#.##') + '%', width = 15, bgcolor = color.white, text_color = color.black)
+
+    table.cell(summary, 0, 4, 'Yield Spread (10Y-2Y)', width = 25, bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 1, 4, str.tostring(yield_spread_us, '#.##') + '%', width = 15, bgcolor = color.white, text_color = color_ys_us)
+    table.cell(summary, 2, 4, str.tostring(yield_spread_eu, '#.##') + '%', width = 15, bgcolor = color.white, text_color = color_ys_eu)
+
+    table.cell(summary, 0, 5, 'Credit Spread', width = 25, bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 1, 5, str.tostring(credit_spread_us, '#.##') + '%', width = 15, bgcolor = color.white, text_color = color_cs_us)
+    table.cell(summary, 2, 5, str.tostring(credit_spread_eu, '#.##') + '%', width = 15, bgcolor = color.white, text_color = color_cs_eu)
+
+    table.cell(summary, 0, 6, 'Unemployment', width = 25, bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 1, 6, str.tostring(unrate_us, '#.##') + '%', width = 15, bgcolor = color.white, text_color = color_unrate_us)
+    table.cell(summary, 2, 6, str.tostring(unrate_eu, '#.##') + '%', width = 15, bgcolor = color.white, text_color = color_unrate_eu)
+
+    // Policy stance
+    string stance_text_us = policy_stance_us > 0 ? 'Restrictive' : 'Accommodative'
+    color stance_color_us = policy_stance_us > 0 ? color.red : color.green
+    table.cell(summary, 0, 7, 'Policy Stance', width = 25, bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 1, 7, stance_text_us, width = 15, bgcolor = color.white, text_color = stance_color_us)
+    string stance_text_eu = policy_stance_eu > 0 ? 'Restrictive' : 'Accommodative'
+    color stance_color_eu = policy_stance_eu > 0 ? color.red : color.green
+    table.cell(summary, 2, 7, stance_text_eu, width = 15, bgcolor = color.white, text_color = stance_color_eu)
+
+    // Macro Score
+    table.cell(summary, 0, 8, 'Macro Score (0-100)', width = 25, bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 1, 8, str.tostring(math.round(macro_score_us)) + ' (' + state_text_us + ')', width = 15, bgcolor = color.white, text_color = state_color_us)
+    table.cell(summary, 2, 8, str.tostring(math.round(macro_score_eu)) + ' (' + state_text_eu + ')', width = 15, bgcolor = color.white, text_color = state_color_eu)
+
+    // === Market Data Column (split into label + value) ===
+    table.cell(summary, 3, 1, 'SPX YTD', bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 4, 1, str.tostring(spx_ytd, '#.##') + '%', bgcolor = color.white, text_color = spx_ytd >= 0 ? color.green : color.red)
+
+    table.cell(summary, 3, 2, 'NDX YTD', bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 4, 2, str.tostring(ndx_ytd, '#.##') + '%', bgcolor = color.white, text_color = ndx_ytd >= 0 ? color.green : color.red)
+
+    table.cell(summary, 3, 3, 'Russell YTD', bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 4, 3, str.tostring(russell_ytd, '#.##') + '%', bgcolor = color.white, text_color = russell_ytd >= 0 ? color.green : color.red)
+
+    table.cell(summary, 3, 4, 'BTC YTD', bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 4, 4, str.tostring(btc_ytd, '#.##') + '%', bgcolor = color.white, text_color = btc_ytd >= 0 ? color.green : color.red)
+
+    table.cell(summary, 3, 5, 'Gold YTD', bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 4, 5, str.tostring(gold_ytd, '#.##') + '%', bgcolor = color.white, text_color = gold_ytd >= 0 ? color.green : color.red)
+
+    table.cell(summary, 3, 6, 'BTC Dom.', bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 4, 6, str.tostring(btc_dom, '#.##') + '%', bgcolor = color.white, text_color = color.black)
+
+    table.cell(summary, 3, 7, 'TLT YTD', bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 4, 7, str.tostring(tlt_ytd, '#.##') + '%', bgcolor = color.white, text_color = tlt_ytd >= 0 ? color.green : color.red)
+
+    table.cell(summary, 3, 8, 'VIX', bgcolor = color.white, text_color = color.black)
+    table.cell(summary, 4, 8, str.tostring(vix_current, '#.##'), bgcolor = color.white, text_color = vix_color)

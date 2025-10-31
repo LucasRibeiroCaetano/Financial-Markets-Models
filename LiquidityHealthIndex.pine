@@ -1,0 +1,46 @@
+//@version=6
+indicator("Liquidity Health Index (LHI)", overlay = false)
+
+// --- Helpers ---
+clamp(x, lo, hi) =>
+    math.min(math.max(x, lo), hi)
+
+// --- Fetch data ---
+us10y = request.security("US10Y", "D", close)
+us02y = request.security("US02Y", "D", close)
+vix   = request.security("CBOE:VIX", "D", close)
+move  = request.security("TVC:MOVE", "D", close)   // <-- corrected symbol
+fedbs = request.security("FRED:WALCL", "W", close) // weekly series
+
+// --- Yield-curve spread ---
+yc_spread = us10y - us02y
+yc_score  = clamp(50 + 100 * (yc_spread - 0.25), 0, 100)
+
+// --- VIX (inverse: high = worse) ---
+vix_score = 100 - clamp((vix - 15) * 5, 0, 100)
+
+// --- MOVE (inverse: high = worse) ---
+move_score = 100 - clamp((move - 100) * 0.5, 0, 100)
+
+// --- Fed balance sheet change (annual % using lag 52 weeks) ---
+fed_lag52 = fedbs[52]
+fed_change_pct = na(fedbs) or na(fed_lag52) or fed_lag52 == 0.0 ? 0.0 : (fedbs / fed_lag52 - 1.0) * 100.0
+fed_score = clamp(50 + fed_change_pct, 0, 100)
+
+// --- Composite Liquidity Health Index ---
+lhi = (yc_score + vix_score + move_score + fed_score) / 4.0
+
+// --- Plot ---
+plot(lhi, "Liquidity Health Index", color = color.new(color.aqua, 0), linewidth = 2)
+hline(70, "Bullish Liquidity", color = color.new(color.green, 60))
+hline(30, "Bearish Liquidity", color = color.new(color.red, 60))
+
+bg_color = lhi > 70 ? color.new(color.green, 85) : lhi < 30 ? color.new(color.red, 85) : color.new(color.orange, 90)
+bgcolor(bg_color)
+
+// --- On-chart table ---
+var table t = table.new(position.top_right, 1, 2)
+if barstate.islast
+    color_val = lhi > 50 ? color.new(color.green, 0) : color.new(color.red, 0)
+    table.cell(t, 0, 0, "Liquidity Health Index", text_color = color.white, bgcolor = color.blue)
+    table.cell(t, 0, 1, str.tostring(lhi, format.percent), text_color = color_val, bgcolor = color.white)
