@@ -1,0 +1,49 @@
+//@version=6
+indicator("Value Zones", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// --- Get Weekly Close Series ---
+weekly_close = request.security(syminfo.tickerid, "W", close)
+
+// --- Compute 200-Week SMA on Weekly Data with smoothing ---
+smoothing_length = 5   // Number of bars to smooth on chart timeframe
+ma200_week_raw = request.security(syminfo.tickerid, "W", ta.sma(close, 200))
+ma200_week = ta.sma(ma200_week_raw, smoothing_length)  // Smoothed version
+
+// --- Plot 200-Week SMA ---
+plot(ma200_week, "200W SMA (Smoothed)", color=color.new(color.blue, 0), linewidth=2)
+
+// --- Fib Extension Multipliers ---
+fib50  = 1.50     // +50%
+fib100 = 2.00     // +100%
+fib150 = 2.50     // +150%
+
+// --- Levels Based on Weekly SMA ---
+level_verycheap = ma200_week
+level_cheap     = ma200_week * fib50
+level_fair      = ma200_week * fib100
+level_expensive = ma200_week * fib150
+level_veryexp   = ma200_week * 3.0    // 200% extension for label positioning only
+
+// --- Plot Lines ---
+p_verycheap  = plot(level_verycheap,  "0% (Very Cheap)",     color=color.new(color.blue, 0))
+p_cheap      = plot(level_cheap,     "50% (Cheap)",          color=color.new(color.green, 0))
+p_fair       = plot(level_fair,      "100% (Fair)",          color=color.new(color.yellow, 0))
+p_expensive  = plot(level_expensive, "150% (Expensive)",     color=color.new(color.red, 0))
+p_veryexp    = plot(level_expensive*1.2, "Very Exp Top",     color=color.new(color.red, 0), display=display.none)
+
+// --- Fill Zones ---
+fill(p_verycheap,  p_cheap,     color=color.new(color.blue, 80))      // Very Cheap 0–50%
+fill(p_cheap,      p_fair,      color=color.new(color.green, 80))     // Cheap 50–100%
+fill(p_fair,       p_expensive, color=color.new(color.yellow, 80))    // Fair 100–150%
+fill(p_expensive,  p_veryexp,   color=color.new(color.red, 80))       // Expensive 150%+
+
+// --- Labels (on last bar only, positioned to the right) ---
+if barstate.islast
+    label.new(bar_index + 1, (level_verycheap + level_cheap) / 2, "Very Cheap",
+      style=label.style_label_right, color=color.new(color.blue, 60),  textcolor=color.white)
+    label.new(bar_index + 1, (level_cheap + level_fair) / 2, "Cheap",
+      style=label.style_label_right, color=color.new(color.green, 50), textcolor=color.white)
+    label.new(bar_index + 1, (level_fair + level_expensive) / 2, "Fair Value",
+      style=label.style_label_right, color=color.new(color.yellow, 50), textcolor=color.white)
+    label.new(bar_index + 1, (level_expensive + level_veryexp) / 2, "Expensive",
+      style=label.style_label_right, color=color.new(color.red, 60), textcolor=color.white)
